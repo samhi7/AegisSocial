@@ -17,6 +17,15 @@ const Feed = () => {
   const [loading, setLoading] = useState(false);
   const [expandedComments, setExpandedComments] = useState({}); // post_id -> boolean
   const [commentInputs, setCommentInputs] = useState({}); // post_id -> string
+  const [commentErrors, setCommentErrors] = useState({}); // post_id -> string
+
+  const clearCommentError = (postId) => {
+    setCommentErrors(prev => {
+      const updated = { ...prev };
+      delete updated[postId];
+      return updated;
+    });
+  };
   
   // Warning/Moderation Modal State
   const [modModal, setModModal] = useState({
@@ -177,9 +186,10 @@ const Feed = () => {
       if (response.ok) {
         if (data.status === "blocked") {
           triggerToast(data.message, "danger");
-          setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+          setCommentErrors(prev => ({ ...prev, [postId]: data.message }));
           setModModal(prev => ({ ...prev, isOpen: false }));
         } else if (data.status === "warning") {
+          clearCommentError(postId);
           setModModal({
             isOpen: true,
             text: textToSend,
@@ -190,14 +200,18 @@ const Feed = () => {
         } else {
           triggerToast("Comment added!", "success");
           setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+          clearCommentError(postId);
           setModModal(prev => ({ ...prev, isOpen: false }));
           fetchPosts();
         }
       } else {
-        triggerToast(data.detail || "Failed to create comment", "danger");
+        const errMsg = data.detail || "Failed to create comment";
+        triggerToast(errMsg, "danger");
+        setCommentErrors(prev => ({ ...prev, [postId]: errMsg }));
       }
     } catch (err) {
       triggerToast("Network error.", "danger");
+      setCommentErrors(prev => ({ ...prev, [postId]: "Network error." }));
     }
   };
 
@@ -241,7 +255,7 @@ const Feed = () => {
   };
 
   return (
-    <div className="feed-container fade-in">
+    <>
       {/* Toast Notification */}
       {toast.show && (
         <div className={`toast-alert glass-card ${toast.type}`}>
@@ -285,7 +299,8 @@ const Feed = () => {
         </div>
       )}
 
-      <div className="create-post-box glass-card">
+      <div className="feed-container fade-in">
+        <div className="create-post-box glass-card">
         <h3>Share something...</h3>
         <div className="create-post-input-wrapper">
           <textarea
@@ -404,13 +419,26 @@ const Feed = () => {
                       )}
                     </div>
 
+                    {commentErrors[post.id] && (
+                      <div className="comment-error-banner">
+                        <AlertTriangle size={14} className="err-icon" />
+                        <span>{commentErrors[post.id]}</span>
+                        <button className="close-error-btn" onClick={() => clearCommentError(post.id)}>×</button>
+                      </div>
+                    )}
+
                     <div className="add-comment-box">
                       <input 
                         type="text" 
                         className="input-field comment-input" 
                         placeholder="Write a comment..."
                         value={commentInputs[post.id] || ''}
-                        onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                        onChange={(e) => {
+                          setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }));
+                          if (commentErrors[post.id]) {
+                            clearCommentError(post.id);
+                          }
+                        }}
                       />
                       <button 
                         className="btn btn-primary add-comment-btn"
@@ -806,8 +834,54 @@ const Feed = () => {
         .add-comment-btn {
           padding: 8px 12px;
         }
+
+        .comment-error-banner {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          border-left: 4px solid var(--color-danger);
+          border-radius: var(--border-radius-sm);
+          color: #ef4444;
+          font-size: 0.8rem;
+          font-weight: 600;
+          margin-bottom: 8px;
+          animation: slideDown 0.2s ease-out forwards;
+        }
+
+        .comment-error-banner .err-icon {
+          flex-shrink: 0;
+          color: var(--color-danger);
+        }
+
+        .comment-error-banner span {
+          flex: 1;
+        }
+
+        .close-error-btn {
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.4);
+          font-size: 1.1rem;
+          cursor: pointer;
+          line-height: 1;
+          padding: 0 4px;
+          transition: color var(--transition-fast);
+        }
+
+        .close-error-btn:hover {
+          color: var(--color-danger);
+        }
+
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 };
 
