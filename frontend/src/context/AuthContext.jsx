@@ -39,6 +39,25 @@ export const AuthProvider = ({ children }) => {
     fetchProfile();
   }, [token]);
 
+  const parseError = (data, defaultMsg) => {
+    if (!data || !data.detail) return defaultMsg;
+    if (typeof data.detail === 'string') return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail.map(err => {
+        if (err && typeof err === 'object') {
+          const field = err.loc && err.loc.length > 1 ? err.loc[1] : '';
+          const prefix = field ? `${field.charAt(0).toUpperCase() + field.slice(1)}: ` : '';
+          return `${prefix}${err.msg}`;
+        }
+        return typeof err === 'string' ? err : JSON.stringify(err);
+      }).join(', ');
+    }
+    if (typeof data.detail === 'object') {
+      return JSON.stringify(data.detail);
+    }
+    return defaultMsg;
+  };
+
   const login = async (username, password) => {
     setError(null);
     try {
@@ -51,7 +70,7 @@ export const AuthProvider = ({ children }) => {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
+        throw new Error(parseError(data, "Login failed"));
       }
       localStorage.setItem('token', data.access_token);
       setToken(data.access_token);
@@ -75,7 +94,7 @@ export const AuthProvider = ({ children }) => {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || "Signup failed");
+        throw new Error(parseError(data, "Signup failed"));
       }
       localStorage.setItem('token', data.access_token);
       setToken(data.access_token);

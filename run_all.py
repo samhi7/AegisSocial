@@ -2,6 +2,14 @@ import subprocess
 import os
 import sys
 import time
+import threading
+from queue import Queue, Empty
+
+def enqueue_output(out, queue, prefix):
+    for line in iter(out.readline, ''):
+        if line:
+            queue.put(f"[{prefix}] {line.strip()}")
+    out.close()
 
 def run():
     print("=" * 60)
@@ -63,12 +71,14 @@ def run():
     print("Press Ctrl+C to terminate both servers.")
     print("=" * 60 + "\n")
 
-    # Monitor outputs and forward logs
+    # Monitor outputs and forward logs using threads
+    log_queue = Queue()
+    t_backend = threading.Thread(target=enqueue_output, args=(backend_process.stdout, log_queue, "Backend"), daemon=True)
+    t_frontend = threading.Thread(target=enqueue_output, args=(frontend_process.stdout, log_queue, "Frontend"), daemon=True)
+    t_backend.start()
+    t_frontend.start()
+
     try:
-        # Set processes to non-blocking read
-        os.set_blocking(backend_process.stdout.fileno(), False)
-        os.set_blocking(frontend_process.stdout.fileno(), False)
-        
         while True:
             # Check if terminated
             if backend_process.poll() is not None:
@@ -78,21 +88,12 @@ def run():
                 print("\n[Frontend Terminated]")
                 break
 
-            # Print backend logs
-            try:
-                line = backend_process.stdout.readline()
-                if line:
-                    print(f"[Backend] {line.strip()}")
-            except IOError:
-                pass
-
-            # Print frontend logs
-            try:
-                line = frontend_process.stdout.readline()
-                if line:
-                    print(f"[Frontend] {line.strip()}")
-            except IOError:
-                pass
+            while True:
+                try:
+                    line = log_queue.get_nowait()
+                    print(line)
+                except Empty:
+                    break
 
             time.sleep(0.1)
 
